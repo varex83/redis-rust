@@ -1,0 +1,20 @@
+[package]
+name = "redis_rust"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "redis_rust"
+
+[[bin]]
+name = "redis_rust"
+path = "src/main.rs"
+
+[[bin]]
+name = "redis_client"
+path = "src/client.rs"
+
+[dependencies]
+dashmap = { version = "5.5.0", features = ["serde"] }
+serde = "1.0.171"
+smart-default = "0.7.1"
