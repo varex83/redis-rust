@@ -18,3 +18,5 @@ path = "src/client.rs"
 dashmap = { version = "5.5.0", features = ["serde"] }
 serde = "1.0.171"
 smart-default = "0.7.1"
+log = { version = "0.4.19", features = ["max_level_debug", "release_max_level_debug"] }
+simple_logger = "4.2.0"

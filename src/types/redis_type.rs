@@ -1,4 +1,4 @@
-use crate::types::{ArrayType, EventChannelType, IntegerType, StringType};
+use crate::types::{ArrayType, EventChannelType, IntegerType, RedisError, Result, StringType};
 use serde::{Deserialize, Serialize};
 
 /// RedisType - is implementation of basic Redis' types
@@ -11,37 +11,56 @@ use serde::{Deserialize, Serialize};
 /// - `Array(ArrayType)` -- Array implementation
 /// - `EventChannel(EventChannelType)` -- Channel type
 /// - `Null` - Just nothing :D
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug, Hash, Eq, PartialOrd, PartialEq)]
 pub enum RedisType {
     String(StringType),
     Integer(IntegerType),
     Array(ArrayType),
     EventChannel(EventChannelType),
+    Error(StringType),
     Null,
     Ok,
 }
 
 impl RedisType {
-    pub fn parse(str: String) -> Self {
-        if str.starts_with('+') {
-            RedisType::String(str[1..].to_string())
-        } else if str.starts_with(':') {
-            RedisType::Integer(str[1..].parse::<IntegerType>().unwrap())
-        } else if str.starts_with('*') {
-            let mut arr = ArrayType::new();
-            let mut lines = str.lines();
-            lines.next();
-            for line in lines {
-                arr.push(RedisType::parse(line.to_string()));
+    /// Rewrite this
+    pub fn parse(str: String) -> Result<Self> {
+        let first_byte = str
+            .chars()
+            .next()
+            .ok_or(RedisError::Custom("Empty string".to_string()))?;
+
+        let other = str
+            .strip_prefix(first_byte)
+            .ok_or(RedisError::Custom("Stripping prefix failed".to_string()))?
+            .to_string();
+
+        Ok(match first_byte {
+            '+' => RedisType::String(other),
+            ':' => RedisType::Integer(
+                other
+                    .parse::<IntegerType>()
+                    .map_err(|_| RedisError::Custom("Parsing integer failed".to_string()))?,
+            ),
+            '*' => {
+                let mut arr = ArrayType::new();
+                let mut lines = other.lines();
+                lines.next();
+                for line in lines {
+                    arr.push(RedisType::parse(line.to_string())?);
+                }
+                RedisType::Array(arr)
             }
-            RedisType::Array(arr)
-        } else if str.starts_with("$-1") {
-            RedisType::Null
-        } else if str.starts_with("+OK") {
-            RedisType::Ok
-        } else {
-            RedisType::Null
-        }
+            '$' => {
+                if other.as_str() == "$-1" {
+                    RedisType::Null
+                } else {
+                    RedisType::Error(format!("Unknown type"))
+                }
+            }
+            '-' => RedisType::Error(other),
+            _ => RedisType::Error(format!("Unknown type {}", str)),
+        })
     }
 
     pub fn as_string_formatted(&self) -> String {
@@ -66,6 +85,12 @@ impl RedisType {
                     res.push_str(&item.as_string_formatted().to_string());
                     res.push_str("\r\n");
                 }
+                res
+            }
+            RedisType::Error(str) => {
+                let mut res = String::from("-");
+                res.push_str(str);
+                res.push_str("\r\n");
                 res
             }
             RedisType::EventChannel(_ch) => "+OK\r\n".to_string(),
